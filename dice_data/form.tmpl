@@ -1,0 +1,111 @@
+<html>
+<head>
+	<title>Gradia Verified Dice Server</title>
+	<link rel="stylesheet" type="text/css" charset="utf-8" media="screen" href="/moin_static193/moniker/css/screen.css">
+</head>
+<body>
+
+<h1>Gradia Verified Dice Server</h1>
+
+<div id="page" style="width: 650px; margin-left: 20px">
+<h3>Instructions</h3>
+<p>
+Welcome to the Gradia Verified Dice Server! This program is for
+rolling dice for role-playing games when the GM and the player
+are not in the same place - usually over email. Fill in the GM's
+email address as the recipient, a short description of what this
+roll is for, your name (or your character's name..), and the dice
+that you want to roll.  When all the fields are submitted (either
+all at once, or from a partially-filled form - see below), the
+results are both displayed to the user and emailed to the
+recipient address, digitally signed with the Dice Server's PGP
+key to prove they have not been tampered with.
+</p>
+
+<p>
+If you submit this form without filling in all the inputs,
+you will be returned to a version of this page that asks for
+just the remaining items. You can use the link to that page
+to send to people. (e.g., a GM might fill in everything but
+the name field, and email the link to all his players to have
+them all send him perception tests.)
+</p>
+
+{% if not 'roll' in form %}
+<p><b>Dice to roll</b><br>The 'Dice to roll' field takes a
+comma-separated list of dice rolls that you want to make.
+For example, to roll attack and damage together, you might
+enter "1d20+8, 1d8+4". The formats accepted are:
+<ul>
+	<li><b>Standard</b>: <i>x</i><b>d</b><i>y</i>[+/-<i>z</i>] -
+		rolls and sums <i>x</i> <i>y</i>-sided dice, optionally
+		adding or subtracting <i>z</i>. Example: <i>3d6+4</i></li>
+	<li><b>Versus</b>: <i>x</i><b>d</b><i>y</i>[<b>e</b>]<b>v</b><i>t</i> -
+		rolls <i>x</i> <i>y</i>-sided dice, counting the number
+		that roll <i>t</i> or greater.</li>
+	<li><b>Open</b>: <i>x</i><b>d</b><i>y</i>[<b>e</b>]<b>o</b> -
+		rolls <i>x</i> <i>y</i>-sided dice, reporting the highest
+		roll.</li>
+	<li>Adding an <b>e</b> to the Versus or Open rolls above makes
+		dice 'explode' - Dice are rerolled and have the rolled value
+		added to their total when they roll a <i>y</i>.
+</p>
+{% endif %}
+
+{% if error %}
+<p sytle="color: orange">Error: {{error}}</p>
+{% endif %}
+
+<form action="/dice" method="GET">
+<table border="0" style="margin: 15px; width:400px">
+
+{% if 'recip' in form %}
+<input type="hidden" name="recip" value="{{ form.getvalue('recip') }}">
+{% else %}
+<tr>
+	<td align="right">Email Recipient (GM):</td>
+	<td><input type="text" name="recip" value=""></td>
+</tr>
+{% endif %}
+
+{% if 'tag' in form %}
+<input type="hidden" name="tag" value="{{ form.getvalue('tag') }}">
+{% else %}
+<tr>
+	<td align="right">Roll Description:</td>
+	<td><input type="text" name="tag" value=""></td>
+</tr>
+{% endif %}
+
+{% if 'roll' in form and not error %}
+<input type="hidden" name="roll" value="{{ form.getvalue('roll') }}">
+{% else %}
+<tr>
+	<td align="right">Dice to roll:</td>
+	<td><input type="text" name="roll" value=""></td>
+</tr>
+{% endif %}
+
+{% if 'name' in form %}
+<input type="hidden" name="name" value="{{ form.getvalue('name') }}">
+{% else %}
+<tr>
+	<td align="right">Roller's Name:</td>
+	<td><input type="text" name="name" value=""></td>
+</tr>
+{% endif %}
+
+<tr>
+	<td></td>
+	<td><input type="submit" value="  Go  "></td>
+</tr>
+
+</table>
+</form>
+
+<br>
+<p style="font-size: smaller">To verify rolls, you can get the server's public PGP key <a href="http://pgp.mit.edu:11371/pks/lookup?op=get&search=0xF3802786F8D4B4D3">from MIT's PGP keyserver</a>. You can also use <a href="/dice_verify">this verification form.</a></p>
+
+</div>
+</body>
+</html>

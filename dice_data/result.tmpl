@@ -1,0 +1,21 @@
+<html>
+<head>
+	<title>Gradia Verified Dice Server</title>
+	<link rel="stylesheet" type="text/css" charset="utf-8" media="screen" href="/moin_static193/moniker/css/screen.css">
+</head>
+<body>
+
+<h1>Gradia Verified Dice Server</h1>
+<div id="page" style="width: 650px; margin-left: 20px">
+
+<p><b>Roll sent to {{form.getvalue('recip')}}!</b></p>
+
+{% for roll in rolls %}
+<p>Rolled {{roll[0]}} - {{roll[1][1]}} {{roll[1][0]}}</p>
+{% endfor %}
+
+<br><br>
+<p><a href="/dice">Start a new roll</a></p>
+</div>
+</body>
+</html>

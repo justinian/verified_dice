@@ -1,0 +1,30 @@
+Gradia Verified Dice Server
+
+This is a little script I wrote in a couple hours, inspired by other verified
+dice web applications out there. Other scripts require you check a roll on the
+site itself, either by cut and pasting into a form, or by finding the roll in a
+list.  I wanted something I could verify easily by looking at the message in my
+mail reader, and so I used PGP to sign the message and ensure its validity.
+Note that I also provide a signature-checker form, for when you don't use or
+have access to PGP.
+
+Requirements:
+	1. Python (2.6+ probably)
+	2. GnuPG
+	3. gnupg python module (apt-get install python-gnupginterface)
+	4. An SMTP server to relay email
+
+To install, just copy dice and dice_verify to a directory that allows running
+CGI. Then install the dice_data directory somewhere outside of your web root.
+Edit dice_settings.py to point to where you installed dice_data, as well as to
+configure mail sending.
+
+Then set up dice_data as a GPG homedir with a new key: 
+
+  gpg --homedir PATH_TO_DICE_DATA --gen-key
+
+Make sure to set the key's email address to be the same as the MAIL_SENDER in
+dice_settings.py.
+
+That should be it! If you've got questions, feel free to contact me at
+justin@devjustinian.com.

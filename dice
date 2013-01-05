@@ -1,0 +1,217 @@
+#!/usr/bin/python
+#
+# Gradia Verified Dice Server
+# Copyright (c) 2012, Justin C. Miller
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met: 
+# 
+#	1. Redistributions of source code must retain the above copyright notice, this
+#	   list of conditions and the following disclaimer. 
+#   2. Redistributions in binary form must reproduce the above copyright notice,
+#      this list of conditions and the following disclaimer in the documentation
+#	   and/or other materials provided with the distribution. 
+#
+#	 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+#	 ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+#	 WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+#	 DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+#	 ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+#	 (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+#	 LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+#	 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+#	 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+#	 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+#	 The views and conclusions contained in the software and documentation are those
+#	 of the authors and should not be interpreted as representing official policies, 
+#	 either expressed or implied, of the FreeBSD Project.
+
+def sign_data( data ):
+	import gnupg
+	from dice_settings import DATA_DIR
+	gpg = gnupg.GPG( gnupghome=DATA_DIR )
+	return str( gpg.sign(data, detach=True) ) 
+
+def send_signed( recipient, sender, subject, body ):
+	import quopri
+	import smtplib
+	from email.mime.base import MIMEBase
+	from email.mime.multipart import MIMEMultipart
+	from email.mime.text import MIMEText
+
+	message = MIMEMultipart()
+	message['Subject'] = subject
+	message['From'] = sender
+	message['To'] = recipient
+	message.preamble = "This is an OpenPGP/MIME signed message (RFC 2440 and 3156)"
+
+	message.set_type( "multipart/signed" )
+	message.set_param( "micalg", "pgp-sha1" )
+	message.set_param( "protocol", "application/pgp-signature" )
+
+	bodyPart = MIMEText(quopri.encodestring(body), _subtype="plain") 
+	bodyPart.set_charset("iso-8859-1")
+	bodyPart.replace_header( "Content-Transfer-Encoding", "quoted-printable" )
+	message.attach(bodyPart)
+
+	sigPart = MIMEBase("application", "pgp-signature")
+	sigPart.add_header('Content-Disposition', 'attachment', filename="signature.asc")
+	to_sign = bodyPart.as_string().rstrip() + "\n"
+	to_sign = to_sign.replace('\n', '\r\n')
+	sigPart.set_payload( sign_data(to_sign) )
+	message.attach(sigPart)
+
+	from dice_settings import SMTP_HOST
+	smtp = smtplib.SMTP(SMTP_HOST)
+	smtp.sendmail(sender, recipient, message.as_string())
+	smtp.quit()
+
+class RollError( ValueError ):
+	pass
+
+def get_rollstrings( multi_rollstr ):
+	return [s.strip() for s in multi_rollstr.split(",")]
+
+def standard_roll( match ):
+	count = int(match.group(1))
+	if count < 1 or count > 30:
+		raise RollError("Invalid number of dice: %d" % count)
+
+	sides = int(match.group(2))
+	if sides not in (2,3,4,6,8,10,12,20,30,100,1000):
+		raise RollError("Unknown die type: %d" % sides)
+
+	mod = 0
+	if match.group(3) is not None:
+		mod = int(match.group(3))
+
+	from random import randint
+	rolls = [randint(1,sides) for i in range(count)]
+	return (rolls, sum(rolls)+mod)
+
+def roll_explode( sides ):
+	from random import randint
+	total = 0
+	roll = randint(1, sides)
+	while roll == sides:
+		total += roll
+		roll = randint(1, sides)
+	return total + roll
+
+def versus_roll( match ):
+	count = int(match.group(1))
+	if count < 1 or count > 30:
+		raise RollError("Invalid number of dice: %d" % count)
+
+	sides = int(match.group(2))
+	if sides not in (2,3,4,6,8,10,12,20,30,100,1000):
+		raise RollError("Unknown die type: %d" % sides)
+
+	explode = bool(match.group(3) is not None)
+	target = int(match.group(4))
+	
+	if explode:
+		rolls = [roll_explode(sides) for i in range(count)]
+	else:
+		from random import randint
+		rolls = [randint(1,sides) for i in range(count)]
+
+	return (rolls, len([i for i in rolls if i >= target]))
+
+def open_roll( match ):
+	count = int(match.group(1))
+	if count < 1 or count > 30:
+		raise RollError("Invalid number of dice: %d" % count)
+
+	sides = int(match.group(2))
+	if sides not in (2,3,4,6,8,10,12,20,30,100,1000):
+		raise RollError("Unknown die type: %d" % sides)
+
+	explode = bool(match.group(3) is not None)
+	
+	if explode:
+		rolls = [roll_explode(sides) for i in range(count)]
+	else:
+		from random import randint
+		rolls = [randint(1,sides) for i in range(count)]
+
+	return (rolls, max(rolls))
+
+def roll( multi_rollstr ):
+	import re
+	standard_re = re.compile(r'([0-9]+)d([0-9]+)([+-][0-9]+)?$')
+	versus_re = re.compile(r'([0-9]+)d([0-9]+)(e)?v([0-9]+)$')
+	open_re = re.compile(r'([0-9]+)d([0-9]+)(e)?o$')
+
+	results = []
+	for rollstr in get_rollstrings(multi_rollstr):
+		match = standard_re.match(rollstr)
+		if match is not None:
+			results.append( standard_roll(match) )
+			continue
+
+		match = versus_re.match(rollstr)
+		if match is not None:
+			results.append( versus_roll(match) )
+			continue
+
+		match = open_re.match(rollstr)
+		if match is not None:
+			results.append( open_roll(match) )
+			continue
+
+		raise RollError("Bad roll string: " + rollstr)
+
+	return results
+
+def get_template( name ):
+	from jinja2 import Environment, FileSystemLoader
+	from dice_settings import DATA_DIR
+	env = Environment( loader=FileSystemLoader(DATA_DIR) )
+	return env.get_template(name)
+
+def show_form( form, error="" ):
+	template = get_template('form.tmpl')
+	print template.render( form=form, error=error )
+
+def send_roll( form ):
+	rollstr = form['roll'].value
+	name = form['name'].value
+	tag = form['tag'].value
+
+	try:
+		rolls = roll(rollstr)
+		rollstrs = get_rollstrings(rollstr)
+	except RollError, e:
+		show_form( form, e.message )
+
+	subject = "[ROLL] %s : %s" % (tag, name)
+	body = "Roll result: %s rolled %s:" % (name, tag)
+	for rollstr, result in zip(rollstrs, rolls):
+		body += "\n%20s - total: %d  %s" % (rollstr, result[1], result[0])
+	body += "\n"
+
+	from dice_settings import MAIL_SENDER
+	send_signed( form.getvalue('recip'), MAIL_SENDER, subject, body )
+
+	template = get_template('result.tmpl')
+	print template.render( rolls=zip(rollstrs, rolls), form=form )
+
+import cgi
+import cgitb
+cgitb.enable()
+
+print "Content-type: text/html\n"
+
+fields = ['roll', 'name', 'tag', 'recip']
+form = cgi.FieldStorage()
+for f in fields:
+	if f not in form:
+		show_form(form)
+		break
+else:
+	send_roll(form)
+
+

@@ -1,0 +1,45 @@
+<html>
+<head>
+	<title>Gradia Verified Dice Server</title>
+	<link rel="stylesheet" type="text/css" charset="utf-8" media="screen" href="/moin_static193/moniker/css/screen.css">
+</head>
+<body>
+
+<h1>Gradia Verified Dice Server</h1>
+<div id="page" style="width: 650px; margin-left: 20px">
+
+{% if message %}
+{% if verified %}
+<div style="width: 90%; padding: 5px; background: #00bb00;">
+<b>Success!</b> The message is valid!
+</div>
+{% else %}
+<div style="width: 90%; padding: 5px; background: #dd5555;">
+<b>Failure!</b> The message is not valid!
+</div>
+{% endif %}
+{% endif %}
+
+<h3>Message Verifier</h3>
+
+<form action="/dice_verify" method="POST">
+<textarea name="message" cols="80" rows="20" style="margin: 10px"></textarea>
+<br>
+<input type="submit" value=" Check ">
+</form>
+
+<h3>Instructions</h3>
+<p>
+If you don't have a PGP or GnuPG plugin for your email client, you can
+use this form to verify that a message came from this dice server, and
+that it is un-tampered. To verify your message, use your email client's
+"show message source" or "show original" option for an email from this
+dice server. Copy the entire text of the message source, and paste it
+into the form above, then click "Check".
+<p>
+
+<br><br>
+<p><a href="/dice">Start a new roll</a></p>
+</div>
+</body>
+</html>

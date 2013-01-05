@@ -1,0 +1,122 @@
+#!/usr/bin/python
+#
+# Gradia Verified Dice Server
+# Copyright (c) 2012, Justin C. Miller
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met: 
+# 
+#	1. Redistributions of source code must retain the above copyright notice, this
+#	   list of conditions and the following disclaimer. 
+#   2. Redistributions in binary form must reproduce the above copyright notice,
+#      this list of conditions and the following disclaimer in the documentation
+#	   and/or other materials provided with the distribution. 
+#
+#	 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+#	 ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+#	 WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+#	 DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+#	 ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+#	 (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+#	 LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+#	 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+#	 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+#	 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+#	 The views and conclusions contained in the software and documentation are those
+#	 of the authors and should not be interpreted as representing official policies, 
+#	 either expressed or implied, of the FreeBSD Project.
+
+def verify_data( data, signature ):
+	import gnupg
+	import StringIO
+	import tempfile
+
+	with tempfile.NamedTemporaryFile() as datafile:
+		datafile.write(data)
+		datafile.seek(0)
+		sigfile = StringIO.StringIO(signature)
+
+		from dice_settings import DATA_DIR
+		gpg = gnupg.GPG( gnupghome=DATA_DIR )
+		return bool(gpg.verify_file(sigfile, datafile.name))
+
+def check_signature( message_str ):
+	from email import message_from_string
+
+	message = message_from_string(message_str)
+	bodyPart = None
+	sigPart = None
+
+	for part in message.walk():
+		if part.get_content_type() == "text/plain":
+			bodyPart = part
+		elif part.get_content_type() == "application/pgp-signature":
+			sigPart = part
+
+		if bodyPart and sigPart:
+			break
+	else:
+		# Wrong parts!
+		return False
+
+	signData = (bodyPart.as_string().rstrip() + "\n").replace("\r\n", "\n").replace("\n", "\r\n")
+	return verify_data( signData, sigPart.get_payload() )
+
+def send_signed( recipient, sender, subject, body ):
+	import quopri
+	import smtplib
+	from email.mime.base import MIMEBase
+	from email.mime.multipart import MIMEMultipart
+	from email.mime.text import MIMEText
+
+	message = MIMEMultipart()
+	message['Subject'] = subject
+	message['From'] = sender
+	message['To'] = recipient
+	message.preamble = "This is an OpenPGP/MIME signed message (RFC 2440 and 3156)"
+
+	message.set_type( "multipart/signed" )
+	message.set_param( "micalg", "pgp-sha1" )
+	message.set_param( "protocol", "application/pgp-signature" )
+
+	bodyPart = MIMEText(quopri.encodestring(body), _subtype="plain") 
+	bodyPart.set_charset("iso-8859-1")
+	bodyPart.replace_header( "Content-Transfer-Encoding", "quoted-printable" )
+	message.attach(bodyPart)
+
+	sigPart = MIMEBase("application", "pgp-signature")
+	sigPart.add_header('Content-Disposition', 'attachment', filename="signature.asc")
+	to_sign = bodyPart.as_string().rstrip() + "\n"
+	to_sign = to_sign.replace('\n', '\r\n')
+	sigPart.set_payload( sign_data(to_sign) )
+	message.attach(sigPart)
+
+	smtp = smtplib.SMTP("localhost")
+	smtp.sendmail(sender, recipient, message.as_string())
+	smtp.quit()
+
+def get_template( name ):
+	from jinja2 import Environment, FileSystemLoader
+	from dice_settings import DATA_DIR
+	env = Environment( loader=FileSystemLoader(DATA_DIR) )
+	return env.get_template(name)
+
+def show_form( form ):
+	template = get_template('verify_form.tmpl')
+
+	verified = False
+	if 'message' in form:
+		verified = check_signature( form.getvalue('message') )
+
+	print template.render( message=form.getvalue('message'), verified=verified )
+
+import cgi
+import cgitb
+cgitb.enable()
+
+print "Content-type: text/html\n"
+
+form = cgi.FieldStorage()
+show_form(form)
